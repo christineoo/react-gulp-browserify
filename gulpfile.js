@@ -1,55 +1,59 @@
 var gulp = require('gulp');
-var concat = require('gulp-concat');
 var uglify = require('gulp-uglify');
-var react = require('gulp-react');
 var htmlreplace = require('gulp-html-replace');
+var source = require('vinyl-source-stream');
+var browserify = require('browserify');
+var watchify = require('watchify');
+var reactify = require('reactify');
+var streamify = require('gulp-streamify');
 
 var path = {
   HTML: 'src/index.html',
-  ALL: ['src/js/*.js', 'src/js/**/*.js', 'src/index.html'],
-  JS: ['src/js/*.js', 'src/js/**/*.js'],
   MINIFIED_OUT: 'build.min.js',
-  DEST_SRC: 'dist/src',
+  OUT: 'build.js',
+  DEST: 'dist',
   DEST_BUILD: 'dist/build',
-  DEST: 'dist'
+  DEST_SRC: 'dist/src',
+  ENTRY_POINT: './src/js/App.js'
 };
 
-// TASK 1
-// converted your JSX to JS, then outputted the results to a 
-// new src folder in a new dist folder
-gulp.task('transform', function(){
-  gulp.src(path.JS)
-    .pipe(react())
-    .pipe(gulp.dest(path.DEST_SRC));
-});
-
-// TASK 2
-// take index.html file and copy it over to dist folder
 gulp.task('copy', function(){
   gulp.src(path.HTML)
     .pipe(gulp.dest(path.DEST));
 });
 
-// WATCH TASK
-//watch will always be running so when we change either our 
-//index.html or any of the JS files, our two tasks from earlier 
-//will run and update the code in the dist folder
-gulp.task('watch', function(){
-  gulp.watch(path.ALL, ['transform', 'copy']);
+gulp.task('watch', function() {
+  gulp.watch(path.HTML, ['copy']);
+
+  var watcher  = watchify(browserify({
+    entries: [path.ENTRY_POINT],
+    transform: [reactify],
+    debug: true,
+    cache: {}, packageCache: {}, fullPaths: true
+  }));
+
+  return watcher.on('update', function () {
+    watcher.bundle()
+      .pipe(source(path.OUT))
+      .pipe(gulp.dest(path.DEST_SRC))
+      console.log('Updated');
+  })
+    .bundle()
+    .pipe(source(path.OUT))
+    .pipe(gulp.dest(path.DEST_SRC));
 });
 
-// PRODUCTION TASKS
 gulp.task('build', function(){
-  gulp.src(path.JS)
-    .pipe(react())
-    .pipe(concat(path.MINIFIED_OUT))
-    .pipe(uglify({file:path.MINIFIED_OUT}))
+  browserify({
+    entries: [path.ENTRY_POINT],
+    transform: [reactify],
+  })
+    .bundle()
+    .pipe(source(path.MINIFIED_OUT))
+    .pipe(streamify(uglify({file:path.MINIFIED_OUT})))
     .pipe(gulp.dest(path.DEST_BUILD));
-})
+});
 
-// Replace the code block enclosed in <!-- build:js --> code <!-- endbuild -->
-// with <script src=”build/build.min.js”></script> without modifiying 
-// the original index.html
 gulp.task('replaceHTML', function(){
   gulp.src(path.HTML)
     .pipe(htmlreplace({
@@ -58,8 +62,6 @@ gulp.task('replaceHTML', function(){
     .pipe(gulp.dest(path.DEST));
 });
 
-// DEFAULT TASK
-gulp.task('default', ['watch']);
-
-// PRODUCTION TASK
 gulp.task('production', ['replaceHTML', 'build']);
+
+gulp.task('default', ['watch']);
